@@ -22,7 +22,7 @@ on:
       armbian_board:
         description: "Select device board."
         required: false
-        default: "all"
+        default: "fine3399"
         type: choice
         options:
           - all
@@ -230,7 +230,7 @@ on:
       auto_kernel:
         description: "Auto use the latest kernel."
         required: false
-        default: true
+        default: false
         type: boolean
       kernel_repo:
         description: "Set the kernel repository."
@@ -374,6 +374,20 @@ jobs:
           echo "build_tag=Armbian_${{ inputs.set_release }}_arm64_${{ inputs.armbian_edition }}_$(date +"%Y.%m")" >> ${GITHUB_ENV}
           echo "status=success" >> ${GITHUB_OUTPUT}
 
+      - name: Prepare rebuild inputs
+        if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
+        run: |
+          # Choose kernel based on selected board to avoid invalid kernel list
+          if [[ "${{ inputs.armbian_board }}" == "fine3399" ]]; then
+            # Use 5.15.201 which contains rk3399-fine3399.dtb
+            echo "REBUILD_KERNEL=5.15.201" >> ${GITHUB_ENV}
+            echo "REBUILD_AUTOKERNEL=false" >> ${GITHUB_ENV}
+          else
+            # default to the tested 5.15.201 for other boards (change as needed)
+            echo "REBUILD_KERNEL=5.15.201" >> ${GITHUB_ENV}
+            echo "REBUILD_AUTOKERNEL=false" >> ${GITHUB_ENV}
+          fi
+
       - name: Upload Armbian image to Release
         uses: ncipollo/release-action@main
         if: ${{ steps.clean.outputs.status == 'success' && !cancelled() }}
@@ -391,10 +405,9 @@ jobs:
           build_target: armbian
           armbian_path: build/output/images/*.img.gz
           armbian_board: ${{ inputs.armbian_board }}
-          # Force a specific stable 5.15 kernel to avoid placeholder 5.15.y (404)
-          armbian_kernel: "5.15.201"
-          # Disable auto selection so the action uses the explicit version above
-          auto_kernel: false
+          # Kernel selection is prepared in the previous step and stored in GITHUB_ENV
+          armbian_kernel: ${{ env.REBUILD_KERNEL }}
+          auto_kernel: ${{ env.REBUILD_AUTOKERNEL }}
           kernel_repo: ${{ inputs.kernel_repo }}
           kernel_usage: ${{ inputs.kernel_usage }}
           armbian_fstype: ${{ inputs.armbian_fstype }}
